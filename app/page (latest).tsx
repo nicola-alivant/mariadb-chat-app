@@ -1,13 +1,14 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 "use client"
 import './globals.css';
 import { useState, useEffect, FormEvent, ChangeEvent, useRef } from 'react';
-import { ChatUser, Message } from './types/index';
+import { Chat, ChatUser } from './types/index';
 
 interface User {
-  id: number;
-  uid: string;
-  displayName: string;
+  id: string;
+  name: string;
   email: string;
+  role: string;
 }
 
 export default function Home() {
@@ -20,7 +21,7 @@ export default function Home() {
   const [error, setError] = useState<string>('');
   const [users, setUsers] = useState<ChatUser[]>([]);
   const [selectedUser, setSelectedUser] = useState<ChatUser | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Chat[]>([]);
   const [newMessage, setNewMessage] = useState<string>('');
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -29,14 +30,12 @@ export default function Home() {
   const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    const userData = localStorage.getItem('user');
-    
-    if (token && userData) {
-      const parsedUser = JSON.parse(userData);
-      setUser(parsedUser);
+    if (user) {
+      const token = localStorage.getItem('token');
+      // const parsedUser = JSON.parse(userData);
+      setUser(user);
 
-      if (parsedUser.role == 'customer') {
+      if (user.role == 'customer') {
         fetchAdminUsers(token);
       } else {
         fetchUsers(token);
@@ -54,9 +53,8 @@ export default function Home() {
 
   useEffect(() => {
     if (selectedUser && user) {
-      const chatId = getChatId(user.uid, selectedUser.uid);
-      fetchMessages(chatId);
-      initializeSSE(chatId);
+      fetchMessages(user.id);
+      initializeSSE();
     } else {
       // Close existing SSE connection if no user selected
       if (eventSourceRef.current) {
@@ -86,7 +84,7 @@ export default function Home() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const initializeSSE = (chatId: string) => {
+  const initializeSSE = () => {
     // Close existing connection
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
@@ -96,14 +94,14 @@ export default function Home() {
 
     setConnectionStatus('connecting');
     
-    console.log('Initializing SSE for:', { userId: user.id, chatId });
+    console.log('Initializing SSE for:', { userId: user.id });
     
     // Create new SSE connection
-    const eventSource = new EventSource(`/pages/api/sse?userId=${user.id}&chatId=${chatId}`);
+    const eventSource = new EventSource(`/pages/api/sse?userId=${user.id}`);
     eventSourceRef.current = eventSource;
 
     eventSource.onopen = () => {
-      console.log('SSE connection opened for chatId:', chatId);
+      console.log('SSE connection opened for userId:', user.id);
       setConnectionStatus('connected');
     };
 
@@ -150,14 +148,10 @@ export default function Home() {
       setTimeout(() => {
         if (selectedUser && user) {
           console.log('Attempting to reconnect SSE...');
-          initializeSSE(getChatId(user.uid, selectedUser.uid));
+          initializeSSE();
         }
       }, 3000);
     };
-  };
-
-  const getChatId = (uid1: string, uid2: string): string => {
-    return uid1 < uid2 ? `${uid1}_${uid2}` : `${uid2}_${uid1}`;
   };
 
   const fetchAdminUsers = async (token: string): Promise<void> => {
@@ -199,14 +193,9 @@ export default function Home() {
     }
   };
 
-  const fetchMessages = async (chatId: string): Promise<void> => {
+  const fetchMessages = async (userId: string): Promise<void> => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`/pages/api/messages/${chatId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const response = await fetch(`/pages/api/messages/${userId}`);
       
       if (response.ok) {
         const messagesData = await response.json();
@@ -239,7 +228,6 @@ export default function Home() {
 
       if (response.ok) {
         localStorage.setItem('token', data.token);
-        localStorage.setItem('user', JSON.stringify(data.user));
         setUser(data.user);
         
         if (data.role == 'customer') {
@@ -263,9 +251,8 @@ export default function Home() {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
       }
-      
+
       localStorage.removeItem('token');
-      localStorage.removeItem('user');
       setUser(null);
       setSelectedUser(null);
       setMessages([]);
@@ -279,33 +266,57 @@ export default function Home() {
   const sendMessage = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
     if (!newMessage.trim() || !selectedUser || !user) return;
-
-    const chatId = getChatId(user.uid, selectedUser.uid);
     
     try {
+      // 1. Coba ambil room_chat terlebih dahulu
+      let response = await fetch(`/pages/api/room_chat/${user.id}`);
+      const roomData = await response.json();
+
+      let roomId;
+
+      if (roomData.length === 0) {
+        // 2. Jika belum ada room, buat room baru
+        response = await fetch(`/pages/api/room_chat`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ userId: user.id })
+        });
+
+        const createdRoom = await response.json();
+
+        if (!response.ok) {
+          console.error('Failed to create room', createdRoom);
+          return;
+        }
+
+        roomId = createdRoom.data.id;
+      } else {
+        // 3. Jika sudah ada room, ambil ID room pertama
+        roomId = roomData[0].id;
+      }
+
+      // 4. Kirim pesan ke room yang didapat atau dibuat
       const payload = {
-        chatId,
-        text: newMessage,
-        senderId: user.id,
-        senderName: user.displayName,
-        receiverId: selectedUser.id
+        room_id: roomId,
+        message: newMessage,
+        senderId: user.id
       };
 
-      const token = localStorage.getItem('token');
-      const response = await fetch(`/pages/api/messages/${chatId}`, {
+      const responseMessage = await fetch(`/pages/api/messages/room_id/${roomId}`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify(payload)
       });
-      
-      if (response.ok) {
-        // Message will be received via SSE, so we don't need to manually add it
+
+      if (responseMessage.ok) {
         setNewMessage('');
       } else {
-        console.error('Failed to send message');
+        const error = await responseMessage.text();
+        console.error('Failed to send message', error);
       }
     } catch (error) {
       console.error('Error sending message:', error);
@@ -415,7 +426,7 @@ export default function Home() {
         <div className="sidebar">
           <div className="user-info">
             <h3>Welcome!</h3>
-            <p>{user.displayName || user.email}</p>
+            <p>{user.name || user.email}</p>
             
             {/* Connection Status Indicator */}
             <div style={{ display: 'flex', alignItems: 'center', marginTop: '10px' }}>
@@ -443,7 +454,7 @@ export default function Home() {
                 className={`user-item ${selectedUser?.id === u.id ? 'active' : ''}`}
                 onClick={() => handleUserSelect(u)}
               >
-                {u.displayName || u.email}
+                {u.name || u.email}
               </div>
             ))}
           </div>
@@ -457,7 +468,7 @@ export default function Home() {
           {selectedUser ? (
             <>
               <div className="chat-header">
-                <h3>Chat dengan {selectedUser.displayName || selectedUser.email}</h3>
+                <h3>Chat dengan {selectedUser.name || selectedUser.email}</h3>
               </div>
               
               <div className="messages-container">
@@ -466,10 +477,10 @@ export default function Home() {
                     key={message.id}
                     className={`message ${message.senderId === user.id ? 'sent' : 'received'}`}
                   >
-                    {message.text}
+                    {message.message}
                     <br />
                     <span className={`block text-xs text-end ${message.senderId === user.id ? 'text-white' : 'text-gray-500'}`}>
-                      {new Date(message.timestamp).toLocaleString("id-ID", {
+                      {new Date(message.send_at).toLocaleString("id-ID", {
                         timeZone: userTimeZone,
                         hour: "2-digit",
                         minute: "2-digit",

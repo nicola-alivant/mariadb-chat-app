@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
-// pages/api/sse/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 
 // Store active connections with proper typing
@@ -9,11 +8,10 @@ const connections = new Map<string, ReadableStreamDefaultController>();
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const userId = searchParams.get('userId');
-  const chatId = searchParams.get('chatId');
 
-  console.log('SSE connection request:', { userId, chatId });
+  console.log('SSE connection request:', { userId });
 
-  if (!userId || !chatId) {
+  if (!userId) {
     return new NextResponse('Missing userId or chatId', { status: 400 });
   }
 
@@ -29,7 +27,7 @@ export async function GET(request: NextRequest) {
       controller.enqueue(encoder.encode(`data: ${initialMessage}\n\n`));
       
       // Store connection for this user-chat combination
-      const connectionKey = `${userId}-${chatId}`;
+      const connectionKey = `${userId}`;
       connections.set(connectionKey, controller);
       
       console.log('SSE connection established:', connectionKey);

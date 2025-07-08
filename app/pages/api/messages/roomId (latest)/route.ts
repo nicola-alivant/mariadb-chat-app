@@ -1,8 +1,9 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
-import pool from '../../../../../lib/database';
-import { verifyToken } from '../../../../../lib/auth';
-import { broadcastToChat } from '../../../sse/route';
+import pool from '../../../../lib/database';
+import { verifyToken } from '../../../../lib/auth';
+import { broadcastToChat } from '../../sse/route';
 
 function generateChatId(): string {
   const timestamp = Date.now().toString(36);

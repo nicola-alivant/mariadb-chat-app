@@ -1,21 +1,22 @@
 export interface User {
   id: string;
-  name: string;
+  displayName: string;
   email: string;
-  role: string;
+  uid: string;
 }
 
-export interface Chat {
-  id: string;
-  room_id: string;
-  senderId: string;
-  message: string;
-  send_at: Date;
+export interface Message {
+  id: number;
+  text: string;
+  senderId: number;
+  senderName: string;
+  timestamp: Date;
+  receiverId: string;
 }
 
 export interface ChatUser {
-  id: string;
-  name?: string;
+  id: number;
+  displayName?: string;
   email: string;
-  role: string;
+  uid: string;
 }

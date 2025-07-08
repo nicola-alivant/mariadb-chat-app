@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const [users] = await pool.execute(
-      `SELECT id, name, email, role FROM users WHERE id != ? AND role != 'admin'`,
+      `SELECT id, uid, displayName, email, role FROM users WHERE id != ? AND role != 'admin'`,
       [decoded.userId]
     ) as any;
     

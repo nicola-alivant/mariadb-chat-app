@@ -22,11 +22,11 @@ export async function POST(request: NextRequest) {
     }
 
     const user = users[0];
-    // const isValid = await verifyPassword(password, user.password);
+    const isValid = await verifyPassword(password, user.password);
 
-    // if (!isValid) {
-    //   return NextResponse.json({ message: isValid });
-    // }
+    if (!isValid) {
+      return NextResponse.json({ message: isValid });
+    }
 
     const token = generateToken(user.id);
     
